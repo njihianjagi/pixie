@@ -16,7 +16,7 @@ import {
   useLoader,
 } from "react-three-fiber";
 import { Plane, Html, Box, Icosahedron } from "drei";
-import { DeviceOrientationControls } from "three/examples/jsm/controls/DeviceOrientationControls";
+// import { DeviceOrientationControls } from "three/examples/jsm/controls/DeviceOrientationControls";
 import { Physics, useBox, usePlane, useSphere } from "@react-three/cannon";
 import clamp from "lodash.clamp";
 import create from "zustand";
@@ -28,7 +28,7 @@ const rotation = createRef();
 const betaRef = createRef(0);
 const gammaRef = createRef(0);
 
-const [useStore] = create((set) => ({
+const useStore = create((set) => ({
   count: 1,
   increase: () => set((state) => ({ count: state.count + 1 })),
 }));
