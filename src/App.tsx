@@ -5,35 +5,86 @@ import React, {
   useState,
   useCallback,
   Suspense,
+  MutableRefObject,
 } from "react";
-import ReactDOM from "react-dom";
 import * as THREE from "three";
+import { Vector2 } from "three";
 import {
   Canvas,
   createPortal,
   useFrame,
   useThree,
   useLoader,
-} from "react-three-fiber";
-import { Plane, Html, Box, Icosahedron } from "drei";
-// import { DeviceOrientationControls } from "three/examples/jsm/controls/DeviceOrientationControls";
+  extend,
+} from "@react-three/fiber";
+import { Plane, Html, Box, Icosahedron } from "@react-three/drei";
 import { Physics, useBox, usePlane, useSphere } from "@react-three/cannon";
 import clamp from "lodash.clamp";
 import create from "zustand";
 import COLOR from "nice-color-palettes";
+import { DeviceOrientationControls } from "three-stdlib";
 
 import "./styles.css";
 
-const rotation = createRef();
-const betaRef = createRef(0);
-const gammaRef = createRef(0);
+// Type definitions
+interface MouseProps {
+  width: number;
+  height: number;
+}
 
-const useStore = create((set) => ({
+interface PhyPlaneProps {
+  rotation?: [number, number, number];
+  rotate?: boolean;
+  position?: [number, number, number];
+  [key: string]: any;
+}
+
+interface SphereProps {
+  index: number;
+}
+
+interface InstancedBoxesProps {
+  number?: number;
+}
+
+interface BoxesProps {
+  width: number;
+  height: number;
+}
+
+interface DepthCubeProps {
+  width: number;
+  height: number;
+}
+
+interface PlanePortalProps {
+  width: number;
+  height: number;
+}
+
+interface InteractionManagerProps {
+  [key: string]: any;
+}
+
+interface StoreState {
+  count: number;
+  increase: () => void;
+}
+
+extend({ InstancedMesh: THREE.InstancedMesh })
+
+const rotation: MutableRefObject<DeviceOrientationControls | null> = createRef();
+const betaRef: any = createRef<number>();
+betaRef.current = 0;
+const gammaRef: any = createRef<number>();
+gammaRef.current = 0;
+
+const useStore = create<StoreState>((set) => ({
   count: 1,
   increase: () => set((state) => ({ count: state.count + 1 })),
 }));
 
-function Mouse({ width, height }) {
+function Mouse({ width, height }: MouseProps) {
   const { viewport } = useThree();
 
   return useFrame((state) => {
@@ -62,11 +113,11 @@ function Mouse({ width, height }) {
   });
 }
 
-function InstancedBoxes({ number = 15 }) {
+function InstancedBoxes({ number = 15 }: InstancedBoxesProps) {
   const carbon = useLoader(THREE.TextureLoader, "/carbon.jpeg");
 
   const positions = useMemo(() => {
-    const _positions = [];
+    const _positions: any = [];
 
     // =) generator lol
     for (let index = 0; index <= number - 5; index++) {
@@ -97,7 +148,7 @@ function InstancedBoxes({ number = 15 }) {
       receiveShadow
       args={[null, null, number]}
     >
-      <boxBufferGeometry attach="geometry" args={[0.06, 0.06, 0.06]} />
+      <boxGeometry args={[0.06, 0.06, 0.06]} />
       <meshPhysicalMaterial
         clearcoat={1}
         clearcoatRoughness={0.1}
@@ -106,13 +157,12 @@ function InstancedBoxes({ number = 15 }) {
         roughness={0.2}
         metalness={0.2}
         color="black"
-        attach="material"
       />
     </instancedMesh>
   );
 }
 
-function PhyPlane({ plain, rotate, rotation = [0, 0, 0], ...props }) {
+function PhyPlane({ rotation = [0, 0, 0], rotate = false, ...props }: PhyPlaneProps) {
   const [ref, api] = usePlane(() => ({ ...props, rotation }));
 
   useFrame(() => {
@@ -127,7 +177,7 @@ function PhyPlane({ plain, rotate, rotation = [0, 0, 0], ...props }) {
   return <mesh ref={ref} />;
 }
 
-function Sphere({ index }) {
+function Sphere({ index }: SphereProps) {
   const [map, normal] = useLoader(THREE.TextureLoader, [
     "/vortex.jpg",
     "/flakes.png",
@@ -136,7 +186,7 @@ function Sphere({ index }) {
   const [ref] = useSphere(() => ({
     mass: 1,
     position: [0, 0, 1],
-    args: 0.05,
+    args: [0.05] as [number], // Properly typed as [radius]
   }));
 
   const _materialProps = {
@@ -146,11 +196,11 @@ function Sphere({ index }) {
     roughness: 0.3,
     map: map,
     normalMap: normal,
-    normalScale: [0.3, 0.3],
+    normalScale: new Vector2(0.3, 0.3),
     alphaMap: map,
     transmission: 0.5,
     transparent: true,
-  };
+  } as const;
 
   return (
     <group ref={ref}>
@@ -161,7 +211,7 @@ function Sphere({ index }) {
           side={THREE.BackSide}
         />
       </Icosahedron>
-      <Icosahedron args={[0.05, 4, 4]}>
+      <Icosahedron args={[0.05, 4]}>
         <meshPhysicalMaterial
           {..._materialProps}
           color={COLOR[index][4]}
@@ -172,46 +222,45 @@ function Sphere({ index }) {
   );
 }
 
-function Boxes({ width, height }) {
+function Boxes({ width, height }: BoxesProps) {
   const [carbon] = useLoader(THREE.TextureLoader, ["/carbon.jpeg"]);
 
   const materialProps = {
     clearcoat: 1,
     clearcoatRoughness: 0.1,
-    normalScale: [1.4, 1.4],
+    normalScale: new Vector2(1.4, 1.4),
     normalMap: carbon,
     roughness: 0.2,
     metalness: 0.2,
     side: THREE.BackSide,
     color: "orange",
-  };
+  } as const;
 
   return (
     <group>
       <Box args={[width, height, 0.5]} receiveShadow>
-        <meshPhysicalMaterial {...materialProps} attachArray="material" />
-        <meshPhysicalMaterial {...materialProps} attachArray="material" />
-        <meshPhysicalMaterial {...materialProps} attachArray="material" />
-        <meshPhysicalMaterial {...materialProps} attachArray="material" />
-        <meshPhysicalMaterial
-          transparent
-          opacity={0}
-          side={THREE.BackSide}
-          attachArray="material"
-        />
-        <meshPhysicalMaterial {...materialProps} attachArray="material" />
+        {[...Array(6)].map((_, index) => (
+          <meshPhysicalMaterial 
+            key={index} 
+            {...(index === 4 
+              ? { transparent: true, opacity: 0, side: THREE.BackSide }
+              : materialProps
+            )} 
+            attach={`material-${index}`}
+          />
+        ))}
       </Box>
     </group>
   );
 }
 
-function DepthCube({ width, height }) {
+function DepthCube({ width, height }: DepthCubeProps) {
   const count = useStore((s) => s.count);
 
   return (
     <group>
       <Physics gravity={[0, 0, -30]}>
-        <PhyPlane rotate position={[0, 0, -0.25]} />
+        <PhyPlane rotate plain position={[0, 0, -0.25]} />
         <PhyPlane
           position={[-0.5 * width, 0, -0.25]}
           rotation={[0, Math.PI / 2, 0]}
@@ -230,7 +279,7 @@ function DepthCube({ width, height }) {
         />
 
         <Suspense fallback={null}>
-          {new Array(count).fill().map((_, index) => (
+          {new Array(count).fill(0).map((_, index) => (
             <Sphere key={`0${index}`} index={index} />
           ))}
           <InstancedBoxes />
@@ -254,8 +303,8 @@ function DepthCube({ width, height }) {
   );
 }
 
-function PlanePortal({ width, height }) {
-  const planeRef = useRef();
+function PlanePortal({ width, height }: PlanePortalProps) {
+  const planeRef = useRef<THREE.Mesh>(null);
 
   const [camera] = useState(new THREE.PerspectiveCamera());
 
@@ -278,9 +327,9 @@ function PlanePortal({ width, height }) {
 
   useFrame((state) => {
     camera.position.copy(state.camera.position);
-    camera.quaternion.copy(planeRef.current.quaternion);
+    camera.quaternion.copy(planeRef.current?.quaternion ?? new THREE.Quaternion());
 
-    const portalPosition = new THREE.Vector3().copy(planeRef.current.position);
+    const portalPosition = new THREE.Vector3().copy(planeRef.current?.position ?? new THREE.Vector3());
 
     camera.updateMatrixWorld();
     camera.worldToLocal(portalPosition);
@@ -320,8 +369,9 @@ function PlanePortal({ width, height }) {
   );
 }
 
-function InteractionManager(props) {
-  const { aspect } = useThree();
+function InteractionManager(props: InteractionManagerProps) {
+  const state = useThree();
+  const aspect = state.viewport.aspect;
 
   const { width, height } = useMemo(
     () =>
@@ -334,7 +384,6 @@ function InteractionManager(props) {
             width: aspect,
             height: 1,
           },
-
     [aspect]
   );
 
@@ -343,11 +392,9 @@ function InteractionManager(props) {
   const handleClick = useCallback(
     function handleClick() {
       setClicked(true);
-      rotation.current = new DeviceOrientationControls(
-        new THREE.PerspectiveCamera()
-      );
+      rotation.current = new DeviceOrientationControls(state.camera);
     },
-    [setClicked]
+    [state.camera, setClicked]
   );
 
   useFrame(({ camera }) => {
@@ -355,11 +402,11 @@ function InteractionManager(props) {
 
     rotation.current.update();
 
-    if (!rotation.current?.deviceOrientation) return;
+    if (!rotation.current.deviceOrientation) return;
 
-    const { beta, gamma } = rotation.current.deviceOrientation;
+    const { beta, gamma }: any = rotation.current.deviceOrientation;
 
-    if (!beta || !gamma) return;
+    if (beta === null || gamma === null) return;
 
     betaRef.current = clamp(beta, -45 * height, 45 * height);
     gammaRef.current = clamp(gamma, -45 * width, 45 * width);
@@ -378,8 +425,12 @@ function InteractionManager(props) {
     <PlanePortal width={width} height={height} />
   ) : (
     <Plane material-transparent material-opacity={0} onClick={handleClick}>
-      <Html center scaleFactor={10}>
-        <div style={{ color: "black", fontFamily: "Fredoka One" }}>
+      <Html center>
+        <div style={{ 
+          color: "black", 
+          fontFamily: "Fredoka One",
+          transform: 'scale(10)'
+        }}>
           Click Here
         </div>
       </Html>
@@ -387,22 +438,30 @@ function InteractionManager(props) {
   );
 }
 
-function App() {
+export default function App() {
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
   return (
-    <>
+    <div style={{ width: '100vw', height: '100vh' }}>
       <Canvas
-        concurrent
-        shadowMap
-        colorManagement
-        pixelRatio={Math.min(2, isMobile ? window.devicePixelRatio : 1)}
-        camera={{ position: [0, 0, 1], far: 100, near: 0.1 }}
+        shadows
+        gl={{ 
+          pixelRatio: Math.min(2, isMobile ? window.devicePixelRatio : 1),
+          antialias: true
+        }}
+        camera={{ 
+          position: [0, 0, 1], 
+          far: 100, 
+          near: 0.1,
+          fov: 75
+        }}
       >
-        <InteractionManager />
+        <Suspense fallback={null}>
+          <Physics>
+            <InteractionManager />
+          </Physics>
+        </Suspense>
       </Canvas>
-    </>
+    </div>
   );
 }
-
-ReactDOM.render(<App />, document.getElementById("root"));

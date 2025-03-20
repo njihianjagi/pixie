@@ -6,11 +6,12 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      // Add any path aliases if needed
+      "@": "/src",
     },
   },
   server: {
     open: true,
+    port: 3000,
   },
   build: {
     outDir: "build",
