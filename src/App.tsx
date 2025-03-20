@@ -6,9 +6,10 @@ import React, {
   useCallback,
   Suspense,
   MutableRefObject,
+  useEffect,
 } from "react";
 import * as THREE from "three";
-import { Vector2 } from "three";
+import { BufferGeometry, Material, Vector2 } from "three";
 import {
   Canvas,
   createPortal,
@@ -37,6 +38,11 @@ interface PhyPlaneProps {
   rotate?: boolean;
   position?: [number, number, number];
   [key: string]: any;
+}
+
+interface InstancedMeshProps {
+  ref: MutableRefObject<THREE.InstancedMesh | null>;
+  args: [BufferGeometry | undefined, Material | undefined, number];
 }
 
 interface SphereProps {
@@ -73,11 +79,10 @@ interface StoreState {
 
 extend({ InstancedMesh: THREE.InstancedMesh })
 
-const rotation: MutableRefObject<DeviceOrientationControls | null> = createRef();
-const betaRef: any = createRef<number>();
-betaRef.current = 0;
-const gammaRef: any = createRef<number>();
-gammaRef.current = 0;
+// Create refs outside component to persist across renders
+const rotation = { current: null as DeviceOrientationControls | null };
+const betaRef = { current: 0 };
+const gammaRef = { current: 0 };
 
 const useStore = create<StoreState>((set) => ({
   count: 1,
@@ -115,9 +120,10 @@ function Mouse({ width, height }: MouseProps) {
 
 function InstancedBoxes({ number = 15 }: InstancedBoxesProps) {
   const carbon = useLoader(THREE.TextureLoader, "/carbon.jpeg");
+  const meshRef = useRef<THREE.InstancedMesh>(null);
 
   const positions = useMemo(() => {
-    const _positions: any = [];
+    const _positions: [number, number, number][] = [];
 
     // =) generator lol
     for (let index = 0; index <= number - 5; index++) {
@@ -136,23 +142,40 @@ function InstancedBoxes({ number = 15 }: InstancedBoxesProps) {
     return _positions;
   }, [number]);
 
-  const [ref] = useBox((index) => ({
+  const [, api] = useBox<THREE.InstancedMesh>((index) => ({
     position: positions[index],
     args: [0.06, 0.06, 0.06],
   }));
 
+  // Apply physics to the instanced mesh after it's created
+  useEffect(() => {
+    if (meshRef.current) {
+      // Apply physics to each instance
+      for (let i = 0; i < number; i++) {
+        const position = positions[i];
+        const matrix = new THREE.Matrix4().makeTranslation(
+          position[0],
+          position[1],
+          position[2]
+        );
+        meshRef.current.setMatrixAt(i, matrix);
+      }
+      meshRef.current.instanceMatrix.needsUpdate = true;
+    }
+  }, [number, positions]);
+
   return (
     <instancedMesh
-      ref={ref}
+      ref={meshRef}
       castShadow
       receiveShadow
-      args={[null, null, number]}
+      args={[undefined, undefined, number]}
     >
       <boxGeometry args={[0.06, 0.06, 0.06]} />
       <meshPhysicalMaterial
         clearcoat={1}
         clearcoatRoughness={0.1}
-        normalScale={[1.4, 1.4]}
+        normalScale={new Vector2(1.4, 1.4)}
         normalMap={carbon}
         roughness={0.2}
         metalness={0.2}
@@ -163,7 +186,7 @@ function InstancedBoxes({ number = 15 }: InstancedBoxesProps) {
 }
 
 function PhyPlane({ rotation = [0, 0, 0], rotate = false, ...props }: PhyPlaneProps) {
-  const [ref, api] = usePlane(() => ({ ...props, rotation }));
+  const [ref, api] = usePlane<THREE.Mesh>(() => ({ ...props, rotation }));
 
   useFrame(() => {
     if (!rotate) return;
@@ -183,7 +206,7 @@ function Sphere({ index }: SphereProps) {
     "/flakes.png",
   ]);
 
-  const [ref] = useSphere(() => ({
+  const [ref] = useSphere<THREE.Group>(() => ({
     mass: 1,
     position: [0, 0, 1],
     args: [0.05] as [number], // Properly typed as [radius]
@@ -279,10 +302,10 @@ function DepthCube({ width, height }: DepthCubeProps) {
         />
 
         <Suspense fallback={null}>
-          {new Array(count).fill(0).map((_, index) => (
+          {/* {new Array(count).fill(0).map((_, index) => (
             <Sphere key={`0${index}`} index={index} />
-          ))}
-          <InstancedBoxes />
+          ))} */}
+          {/* <InstancedBoxes /> */}
           <Boxes width={width} height={height} />
         </Suspense>
       </Physics>
@@ -305,8 +328,8 @@ function DepthCube({ width, height }: DepthCubeProps) {
 
 function PlanePortal({ width, height }: PlanePortalProps) {
   const planeRef = useRef<THREE.Mesh>(null);
-
-  const [camera] = useState(new THREE.PerspectiveCamera());
+  const sceneRef = useRef<THREE.Scene>(null);
+  const [camera] = useState<THREE.PerspectiveCamera>(new THREE.PerspectiveCamera());
 
   const increase = useStore((s) => s.increase);
 
@@ -389,22 +412,48 @@ function InteractionManager(props: InteractionManagerProps) {
 
   const [clicked, setClicked] = useState(false);
 
-  const handleClick = useCallback(
-    function handleClick() {
-      setClicked(true);
+  const initializeOrientation = useCallback(() => {
+    console.log('init')
+    setClicked(true);
+    if (state.camera) {
       rotation.current = new DeviceOrientationControls(state.camera);
-    },
-    [state.camera, setClicked]
-  );
+      rotation.current.connect();
+    }
+  }, [state.camera]);
+
+  const handleClick = useCallback(async () => {
+    console.log('clicked')
+    // Check if the browser supports device orientation
+    if ('DeviceOrientationEvent' in window) {
+      // Check if we need to request permission (iOS 13+)
+      if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
+        try {
+          const permission = await (DeviceOrientationEvent as any).requestPermission();
+          if (permission === 'granted') {
+            initializeOrientation();
+          } else {
+            console.error('Permission not granted');
+          }
+        } catch (error) {
+          console.error('Error requesting device orientation permission:', error);
+        }
+      } else {
+        // No permission needed (Android, older iOS)
+        initializeOrientation();
+      }
+    } else {
+      console.error('Device orientation not supported');
+    }
+  }, [initializeOrientation]);
 
   useFrame(({ camera }) => {
-    if (!rotation.current) return;
+    if (!rotation.current || !clicked) return;
 
     rotation.current.update();
 
     if (!rotation.current.deviceOrientation) return;
 
-    const { beta, gamma }: any = rotation.current.deviceOrientation;
+    const { beta, gamma } = rotation.current.deviceOrientation;
 
     if (beta === null || gamma === null) return;
 
@@ -424,17 +473,21 @@ function InteractionManager(props: InteractionManagerProps) {
   return clicked ? (
     <PlanePortal width={width} height={height} />
   ) : (
-    <Plane material-transparent material-opacity={0} onClick={handleClick}>
-      <Html center>
-        <div style={{ 
-          color: "black", 
-          fontFamily: "Fredoka One",
-          transform: 'scale(10)'
-        }}>
-          Click Here
-        </div>
-      </Html>
-    </Plane>
+    <PlanePortal width={width} height={height} />
+
+    // <Plane material-transparent material-opacity={0} onClick={handleClick}>
+    //   <Html center>
+    //     <div style={{ 
+    //       color: "black", 
+    //       fontFamily: "Fredoka One",
+    //       transform: 'scale(10)',
+    //       cursor: 'pointer',
+    //       userSelect: 'none'
+    //     }}>
+    //       Click Here
+    //     </div>
+    //   </Html>
+    // </Plane>
   );
 }
 
@@ -447,7 +500,8 @@ export default function App() {
         shadows
         gl={{ 
           pixelRatio: Math.min(2, isMobile ? window.devicePixelRatio : 1),
-          antialias: true
+          antialias: true,
+          alpha: true
         }}
         camera={{ 
           position: [0, 0, 1], 
@@ -455,7 +509,11 @@ export default function App() {
           near: 0.1,
           fov: 75
         }}
+        style={{
+          background: 'transparent'
+        }}
       >
+        <color attach="background" args={['#ffffff']} />
         <Suspense fallback={null}>
           <Physics>
             <InteractionManager />

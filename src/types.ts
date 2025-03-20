@@ -32,7 +32,28 @@ export interface PlanePortalProps {
   height: number;
 }
 
+// Define the iOS-specific DeviceOrientationEvent
+export interface DeviceOrientationEventiOS extends DeviceOrientationEvent {
+  requestPermission?: () => Promise<'granted' | 'denied' | 'default'>;
+}
+
+// Define the device orientation state
 export interface DeviceOrientationState {
   beta: number | null;
   gamma: number | null;
+  alpha?: number | null;
+  absolute?: boolean;
+}
+
+// Define permission states for device orientation
+export type DeviceOrientationPermissionState = 'granted' | 'denied' | 'default' | 'not-requested';
+
+declare global {
+  interface Window { 
+    DeviceOrientationEvent: {
+      prototype: DeviceOrientationEvent;
+      new(type: string, eventInitDict?: DeviceOrientationEventInit): DeviceOrientationEvent;
+      requestPermission?: () => Promise<'granted' | 'denied' | 'default'>;
+    }
+  }
 }
