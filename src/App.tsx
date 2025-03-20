@@ -302,21 +302,21 @@ function DepthCube({ width, height }: DepthCubeProps) {
         />
 
         <Suspense fallback={null}>
-          {/* {new Array(count).fill(0).map((_, index) => (
+          {new Array(count).fill(0).map((_, index) => (
             <Sphere key={`0${index}`} index={index} />
-          ))} */}
-          {/* <InstancedBoxes /> */}
+          ))} 
+           <InstancedBoxes />
           <Boxes width={width} height={height} />
         </Suspense>
       </Physics>
 
       {/* <Mouse width={width} height={height} /> for desktop testing */}
-      <hemisphereLight intensity={0.35} />
+      <hemisphereLight intensity={0.75} />
       <spotLight
         position={[-1, -1, 1]}
         angle={0.3}
         penumbra={1}
-        intensity={1}
+        intensity={12}
         castShadow
         shadow-mapSize-width={1024}
         shadow-mapSize-height={1024}
